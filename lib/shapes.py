@@ -1,6 +1,7 @@
 import numpy as np
 import copy
 import random as ran
+from keras.applications.vgg16 import preprocess_input
 
 pix_max = 255
 class ShapeCreator:
@@ -42,6 +43,7 @@ class ShapeCreator:
         return np.asarray(arr)
 
 
+            
 class Circle:
     def makeCircle(self,img_width,r,x_offset,y_offset):
         arr = np.zeros((img_width,img_width),dtype=np.uint8)
@@ -130,11 +132,48 @@ class SimpleShapeData:
                     dictionary[key] = [index]
         return dictionary   
     
+    def fillImgTri(self,img):
+        shape = img.shape
+        for i in range(shape[0]):
+            draw = False
+            for j in range(shape[1]):
+#                if img[i,j] == img[i,j] and img[i,j] == pix_max:
+#                    continue
+                if draw:
+                    if img[i,j] == pix_max:
+                        draw = False 
+                else:
+                    if img[i,j] == pix_max:
+                        draw = True 
+                if draw:
+                    img[i,j] = pix_max
+        return img   
+    
+    def fillImg(self,img):
+        shape = img.shape
+        for i in range(shape[0]):
+            draw = False
+            count = 0
+            for j in range(shape[1]-10):
+                if img[i,j] == img[i,j+10] and img[i,j] == pix_max:
+                    break
+                if draw:
+                    if img[i,j] == pix_max:
+                        break
+                else:
+                    if img[i,j] == pix_max:
+                        if img[i,j+1] == pix_max and count < 5:
+                            count+=1
+                        else:
+                            draw = True 
+                if draw:
+                    img[i,j] = pix_max
+        return img      
     def makeBatch(self,offsets_arg=None,noises_arg=None):
-        size = 200
+        size = 224#200
         length = 70
         offsets = [[10,10],[90,10],[10,90],[80,80]]
-        noises = [0,0.001,0.002,0.003]
+        noises = [0,0.05,0.1,0.15]
         if not offsets_arg is None:
             offsets = offsets_arg
         if not noises_arg is None:
@@ -152,7 +191,12 @@ class SimpleShapeData:
         for shape_index,fun in enumerate(funs):
             for offset_index,offset in enumerate(offsets):
                 for noise_index,noise in enumerate(noises):               
-                    img = self.addNoise(fun(size,length,offset[0],offset[1]),noise)
+                    img = fun(size,length,offset[0],offset[1])                   
+                    if shape_index == 0:
+                        img = self.fillImgTri(img)
+                    else:
+                        img = self.fillImg(img)
+                    img = self.addNoise(img,noise)
                     label = {"shape":shape_names[shape_index],"offset":offset_names[offset_index],"noise":noises[noise_index]}
                     if fill_train:
                         imgs_train.append(img)
@@ -190,6 +234,22 @@ class SimpleShapeData:
                 elif rnd > threshold:
                     img[i][j] = pix_max 
         return img
+    
+    def vggData(self,label_name,label_value):
+        X = np.expand_dims(self.scans_train,3)
+        X = np.repeat(X,3,3)
+        X = np.array([preprocess_input(i) for i in X])
+        Y = np.array([[1,0] if i[label_name] == label_value else [0,1] for i in self.labels_train])
+        
+
+#        for i in self.scans_train:
+#            arr = np.expand_dims(i,axis=2)
+#            arr = np.repeat(arr,3,2)
+#            X = np.append(X,arr,0)
+#        for i in self.labels_train:
+#            val = 1 if i[label_name] == label_value else 0
+#            Y = np.append(Y,val,0)
+        return X,Y
     
     def prepareTrainingData(self,label_name,label_value):
 #        imgs = self.getScansAtSlice(40)

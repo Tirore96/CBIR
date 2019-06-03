@@ -24,11 +24,11 @@ def timing(f):
 #create categorizeImage() function
 #Dictionary for each of the possible label values
 class Evaluator:
-    def __init__(self,data_obj,method_obj,load_as_slice=True):
+    def __init__(self,data_obj,method_obj,load_as_slice=True,three_slices=False):
         self.data = data_obj
         self.probabilities = None
         if load_as_slice:
-            self.scans = self.data.getScansAtSlice()
+            self.scans = self.data.getScansAtSlice(three_slices=three_slices)
         else:
             self.scans = self.data.scans
         self.labels = self.data.labels
@@ -40,7 +40,7 @@ class Evaluator:
         self.agerange = 10
         print("initialization finished")
         
-    def query(self,m,k):
+    def query(self,m,k): 
         indices,distances = self.method.query(self.scans[m],k)
         return indices,distances
         
@@ -111,26 +111,30 @@ class Evaluator:
         plt.ylabel('precision')
         plt.show()       
             
-    def countClassificationRatio(self,label_indices,label_name,label_value):
-        relevant_count = 0
-        non_relevant_count = 0 
+    def countClassificationRatio(self,label_indices,label_name,is_positive,label_value):
+        hit = 0
+#        print(label_indices,len(self.labels))
         for index in label_indices:
-            if self.labels[index][label_name] == label_value:
-                relevant_count += 1
-            else:
-                non_relevant_count += 1
+            sample_is_positive = self.labels[index][label_name] == label_value
+            sample_and_query_same = sample_is_positive == is_positive
+            if sample_and_query_same:
+                hit += 1
                 
-        return relevant_count / (len(label_indices))
-    
+        ratio = hit / (len(label_indices))
+#        return ratio
+        if is_positive:
+            return ratio
+        else:
+            return 1.0 - ratio
+   
     def calcClassificationProbabilities(self,K,relevant_label,label_value):
         probabilities = np.zeros((self.data.count),dtype=np.float)
         for m_iter in range(self.data.count):
             retrieved_indices,distances = self.query(m_iter,K+1)           
             retrieved_indices = retrieved_indices[1:]           
-#            thresh_index = 0
-#            threshold = 0.0
-#            while threshold < 1.0:
-            ratio = self.countClassificationRatio(retrieved_indices,relevant_label,self.labels[m_iter][relevant_label])
+            ratio = self.countClassificationRatio(retrieved_indices,relevant_label,self.labels[m_iter][relevant_label]==label_value,label_value)
+#            if not self.labels[m_iter][relevant_label] == label_value:
+#                ratio = 1-ratio
             probabilities[m_iter] = ratio
         self.probabilities = probabilities
         return probabilities
@@ -155,7 +159,7 @@ class Evaluator:
         #if filename != None:
         #    plt.savefig("results/"+filename)
         #plt.clf()       
-    def precisionRecall(self,K,relevant_label,label_value,title=None,filename=None):
+    def precisionRecall(self,K,relevant_label,label_value):
         if self.probabilities is None:
             self.probabilities = self.calcClassificationProbabilities(K,relevant_label,label_value)                  
             probabilities = self.probabilities
@@ -181,6 +185,33 @@ class Evaluator:
 
                 
             
+    def avgPrecisionRecallPoints(self,relevant_labels,label_value):
+        relevant_label = relevant_labels[0]
+        positive_p_r = None 
+        negative_p_r = None 
+        p_count = 0
+        n_count = 0
+        for i in range(0,self.data.count):
+            precision,recall = self.precisionRecallPoints(i,relevant_labels)
+            if self.labels[i][relevant_label] == label_value:
+                p_count +=1
+                if positive_p_r is None:
+                    positive_p_r = [precision,recall]
+                else:
+                    positive_p_r[0] = np.add(positive_p_r[0], precision)
+                    positive_p_r[1] = np.add(positive_p_r[1], recall)
+            else:
+                n_count +=1
+                if negative_p_r is None:
+                    negative_p_r = [precision,recall]
+                else:
+                    negative_p_r[0] = np.add(negative_p_r[0], precision)
+                    negative_p_r[1] = np.add(negative_p_r[1], recall)
+        positive_p_r = np.divide(positive_p_r,p_count)
+        negative_p_r = np.divide(negative_p_r,n_count)
+        return positive_p_r, negative_p_r
+
+
             
     def precisionRecallPoints(self,img_index,relevant_labels):
         precision = []

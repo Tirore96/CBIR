@@ -242,18 +242,22 @@ class ConvolutionMethod:
         
         self.layer_fc3 = tf.identity(self.layer_fc3,name="layer_fc3")
         
-        layer_soft_max = tf.nn.log_softmax(self.layer_fc3)
         
-        self.y_pred = self.new_fc_layer(input=layer_soft_max,
+        y_pred_no_softmax = self.new_fc_layer(input=self.layer_fc3,
                                  num_inputs=self.final_feature_size,
                                  num_outputs=self.num_classes,
                                  use_relu=True)
-        self.y_pred = tf.identity(self.y_pred,name="y_pred")
+
+        self.y_pred = tf.nn.log_softmax(y_pred_no_softmax)
+
+        self.y_pred = tf.identity(y_pred_no_softmax,name="y_pred")
+        
         self.y_pred_cls = tf.argmax(self.y_pred, axis=1)       
         cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=self.y_pred,
                                                         labels=self.y_true)
         
         cost = tf.reduce_mean(cross_entropy)       
+        self.cost = tf.identity(cost,name="cost")
         self.optimizer = tf.train.GradientDescentOptimizer(learning_rate=1e-3).minimize(cost,name="optimizer")       
 #        self.optimizer = tf.identity(self.optimizer,name="optimizer")       
         
@@ -276,6 +280,7 @@ class ConvolutionMethod:
 #        global total_iterations
     
         # Start-time used for printing time-usage below.
+        losses= []
         if num_iterations==None:
             num_iterations = int(len(data)/5)
         start_time = time.time()
@@ -299,7 +304,8 @@ class ConvolutionMethod:
             # Run the optimizer using this batch of training data.
             # TensorFlow assigns the variables in feed_dict_train
             # to the placeholder variables and then runs the optimizer.
-            self.session.run(self.optimizer, feed_dict=feed_dict_train)
+            _,loss= self.session.run(self.optimizer,self.cost, feed_dict=feed_dict_train)
+            losses.append(loss)
     
             # Print status every 100 iterations.
     #        if i % 100 == 0:
@@ -324,6 +330,7 @@ class ConvolutionMethod:
         print("Time usage: " + str(timedelta(seconds=int(round(time_dif)))))   
         saver = tf.train.Saver()
         saver.save(self.session, "../models/model")
+        return losses 
 
 
 

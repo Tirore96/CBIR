@@ -6,7 +6,7 @@ class NaiveFeatures:
          return np.mean(img)
         
     def distance(self,vec1,vec2):
-         return spdist.euclidean(vec1,vec2)
+         return abs(vec1-vec2)#spdist.euclidean(vec1,vec2)
   
     def extractFromBatch(self,batch):
         self.matrix = []

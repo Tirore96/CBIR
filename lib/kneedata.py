@@ -7,8 +7,8 @@ class KneeData:
     def __init__(self):
         self.training_index = 0
         self.label_types = ["ishealthy","isright","age"]
-        self.scan_start = 28#36
-        self.scan_end = 228#219
+        self.scan_start = 16#36
+        self.scan_end = 240#219
         self.dim = self.scan_end - self.scan_start
         self.scans = []
         self.labels = []
@@ -69,9 +69,9 @@ class KneeData:
 #                            self.voxelsizes.append(np.asarray(sample["voxelsize"]))
 #                            print(file,self.labels[-1])
 
-            data = [self.scans,self.labels]#,self.ages,self.voxelsizes]
-            with open(pickled_db_path,'wb') as fp:   
-                pickle.dump(data,fp)      
+#            data = [self.scans,self.labels]#,self.ages,self.voxelsizes]
+#            with open(pickled_db_path,'wb') as fp:   
+#                pickle.dump(data,fp)      
         else:
             with open(pickled_db_path,'rb') as fp:   
                 data = pickle.load(fp)             
@@ -139,20 +139,23 @@ class KneeData:
                 retval[age] = [index]
         return retval
         
-    def getScansAtSlice(self,slice_index=None,use_mask=False,flip_knees=False):
+    def getScansAtSlice(self,slice_index=None,three_slices=False):
 #        print(self.scans[0])
         if slice_index == None:
             slice_index = round(self.scans[0].shape[2]/2)           
-        retval = np.zeros((1,self.dim,self.dim),dtype=np.int32)       
+        if three_slices:
+            retval = np.zeros((1,self.dim,self.dim,3),dtype=np.int32)                  
+        else:
+            retval = np.zeros((1,self.dim,self.dim),dtype=np.int32)       
         for scan in self.scans:
-#            if use_mask:
-#                mask = sample["CartFM"]
-#                scan = np.multiply(scan,mask)
-#            if flip_knees:
-#                if not sample["isright"][0][0]:
-#                    scan = scan[:][::-1]
-            scan_slice = scan[:,:,slice_index]
-            scan_slice = np.asarray(scan_slice,dtype=np.int32).reshape(1,self.dim,self.dim)
+            if three_slices:
+                a = 10
+                b = int((2*a)/3)+1
+                scan_slice = scan[:,:,slice_index-a:slice_index+a:b]
+                scan_slice = np.asarray(scan_slice,dtype=np.int32).reshape(1,self.dim,self.dim,3)               
+            else:
+                scan_slice = scan[:,:,slice_index]           
+                scan_slice = np.asarray(scan_slice,dtype=np.int32).reshape(1,self.dim,self.dim)
             retval = np.append(retval,scan_slice,axis=0)
         return retval[1:]
     

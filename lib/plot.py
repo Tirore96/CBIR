@@ -22,6 +22,10 @@ class Plotter:
             print("Distance: ",dist)
         plt.imshow(img,cmap=plt.get_cmap('gray'))
         plt.show()
+        
+    def saveFig(self,img,filename):
+        plt.imshow(img,cmap=plt.get_cmap('gray'))   
+        plt.savefig(filename,bbox_inches='tight')
 
     
     def plotShapes(self,imgs,dists=None):

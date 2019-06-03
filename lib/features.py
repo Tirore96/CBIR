@@ -91,76 +91,7 @@ class AKAZE:
                 zero_lists.append(i)
         return nearest_indices, img_distances[nearest_indices].tolist(),zero_lists
                                                      
-#class HaralickPCASVM:
-#    def extractFeatures(self,img):      
-#        return mh.features.haralick(im).mean(0)        
-#    
-#    def extractFromBatch(self,batch,pickled_db_path="haralickfeatures.pck"):
-#        intermediate_result = []
-#        for i in batch:
-#            intermediate_result.append(self.extractFeatures(i))
-#        intermediate_result = np.asarray(intermediate_result)
-#        self.pca = PCA(n_components=5)
-#        self.pca.fit(intermediate_result)
-#        result = self.pca.transform(intermediate_result)
-#        result = np.asarray(result)
-#        with open(pickled_db_path,'wb') as fp:   
-#            pickle.dump([result,self.pca],fp)      
-#    
-#    def performPCA(self,feature_set,components=5):   
-#        pca = PCA(n_components=components)   
-#        return pca.fit_transform(feature_set)   
-#
-#    def loadFeatures(self,pickled_db_path="haralickfeatures.pck"):
-#        with open(pickled_db_path,'rb') as fp:
-#            self.matrix,self.pca = pickle.load(fp)
-#    
-#    def trainSVM(self,features,labels):
-#        svm = sklearn.svm.LinearSVC()
-#        svm.fit(features,labels)
-#    
-#    def predict(self,img):
-#        features = self.extractFeatures(img)
-#        reduced_features = self.pca(transform(features))
-#        return svm.predict(reduced_features)
-        
-#class Tester:
-#    def __init__(self,batch):
-##        self.p = Plotter()
-#        self.finder = ImageFinder()
-#        self.batch = batch
-#        self.finder.extractFromBatch(batch)
-#        self.finder.loadFeatures()
-#    
-#    def countCorrectlyIdentified(self,batch):
-#        count = 0
-#        length = len(batch)
-#        not_found = []
-#        for index,img in enumerate(batch):
-#            match_indices, dists,zero_lists = self.finder.match(img)
-#            if match_indices[0] == index:
-#                count+=1
-#            else:
-#                not_found.append(img.id)
-#            if len(zero_lists) != 0:
-#                print("warning some feature lists are empty")
-#        print (count, " Out of ",length)
-#        return not_found    
-#    
-#    def multipleCount(self,batch,count):
-#        retval = {}
-#        for i in range(count):
-#            not_found = self.countCorrectlyIdentified(batch)
-#            for j in not_found:
-#                if j in retval:
-#                    retval[j]+=1
-#                else:
-#                    retval[j] = 1
-#        return retval
-#            
-#        
-#            
-#            
+
 
 class Haralicks:
     def __init__(self,compute_dog=False):
@@ -198,35 +129,56 @@ class Haralicks:
         return scipy.spatial.distance.euclidean(vec1,vec2)
     
     def extractFromBatch(self,batch,feature_indices=None, pickled_db_path="haralickfeatures.pck"):
-        self.matrix = []
+        matrix = []
         for i in batch:
-            self.matrix.append(self.extractFeatures(i,feature_indices))
+            matrix.append(self.extractFeatures(i,feature_indices))
 #            print(i.shape)
         with open(pickled_db_path,'wb') as fp:   
-            pickle.dump(self.matrix,fp)      
+            pickle.dump(matrix,fp)      
+        self.matrix = matrix
     
     def loadFeatures(self,pickled_db_path="haralickfeatures.pck"):
         with open(pickled_db_path,'rb') as fp:
             self.matrix = pickle.load(fp)
         
             
-    def countClassificationRatio(self,label_indices,label_name,label_value,labels):
-        relevant_count = 0
-        non_relevant_count = 0 
+    def countClassificationRatio(self,label_indices,label_name,is_positive,label_value,labels):
+        hit = 0
         for index in label_indices:
-            if labels[index][label_name] == label_value:
-                relevant_count += 1
-            else:
-                non_relevant_count += 1
+            sample_is_positive = labels[index][label_name] == label_value
+            sample_and_query_same = sample_is_positive == is_positive
+            if sample_and_query_same:
+                hit += 1
                 
-        return relevant_count / (len(label_indices))
+        ratio = hit / (len(label_indices))
+#        return ratio
+        if is_positive:
+            return ratio
+        else:
+            return 1.0 - ratio
+#        if not is_positive:
+#            ratio = 1 - ratio
+#        return ratio              
+#    def countClassificationRatio(self,label_indices,label_name,label_value,labels):
+#        relevant_count = 0
+#        non_relevant_count = 0 
+#        for index in label_indices:
+#            if labels[index][label_name] == label_value:
+#                relevant_count += 1
+#            else:
+#                non_relevant_count += 1
+#                
+#        return relevant_count / (len(label_indices))
     
     def featureSelector(self,size,K,scans,labels,relevant_label,label_value):
         selection = []
         count = len(scans)
         
+
         binary_labels = [1 if i[relevant_label]==label_value else 0 for i in labels ]       
         best_auc = 0.0
+        first_iter = True
+        auc_up = None
         while len(selection) < size:
             index_auc = []
             for i in range(13):
@@ -243,28 +195,58 @@ class Haralicks:
         #            thresh_index = 0
         #            threshold = 0.0
         #            while threshold < 1.0:
-                    ratio = self.countClassificationRatio(retrieved_indices,relevant_label,labels[m_iter][relevant_label],labels)
+                    ratio = self.countClassificationRatio(retrieved_indices,relevant_label,labels[m_iter][relevant_label]==label_value,label_value,labels)
+#                    ratio = self.countClassificationRatio(retrieved_indices,relevant_label,labels[m_iter][relevant_label],labels)
+#                    if not labels[m_iter][relevant_label] == label_value:
+#                        ratio = 1-ratio
                     probabilities[m_iter] = ratio
                 
+#                for j in range(len(binary_labels)):
+#                    print(probabilities[j],binary_labels[j])
                 auc = roc_auc_score(binary_labels,probabilities)   
+#                print(i,auc)
                 index_auc.append((i,auc))
+    
+#                print(i,probabilities)
             index_auc.sort(reverse=True,key=lambda k: k[1])
 #            print(index_auc)
-            best_feature = index_auc[0][0]
-            local_best_auc = index_auc[0][1]
-            if local_best_auc <= best_auc:
+            print(index_auc)
+            best_feature_l = index_auc[0][0]
+            local_best_auc_l = index_auc[0][1]
+#            best_feature_r = index_auc[-1][0]
+#            local_best_auc_r = index_auc[-1][1]
+
+#            if first_iter:
+#                if abs(best_auc- local_best_auc_l) >= abs(best_auc- local_best_auc_r):
+#                    auc_up = True
+#                else:
+#                    auc_up = False
+#                first_iter = False
+#            if auc_up and local_best_auc_l <= best_auc or not auc_up and local_best_auc_r >= best_auc:
+            if local_best_auc_l <= best_auc: # or not auc_up and local_best_auc_r >= best_auc:
                 break
             else:
-                best_auc = local_best_auc
-            selection.append(best_feature)
+#                if auc_up:
+                best_auc = local_best_auc_l
+                selection.append(best_feature_l)
+#
+#                else:
+#                    best_auc = local_best_auc_r
+#                    selection.append(best_feature_r)
             
 #        selection.sort()
+
+        if len(selection) == 0:
+            selection = [0]
         self.selected_features = selection
+        self.matrix = []
+        print(selection)
         print("finished Haralick Feature selection")
 #               
         
         
     def query(self,query_img,k,feature_indices=None):
+#        print(len(self.matrix))
         if self.matrix is []:
             print("empty feature matrix")
             return []
@@ -384,28 +366,56 @@ class LBPFeatures:
         #            thresh_index = 0
         #            threshold = 0.0
         #            while threshold < 1.0:
-                    ratio = self.countClassificationRatio(retrieved_indices,relevant_label,labels[m_iter][relevant_label],labels)
+                    ratio = self.countClassificationRatio(retrieved_indices,relevant_label,labels[m_iter][relevant_label]==label_value,label_value,labels)
+#                    if not labels[m_iter][relevant_label] == label_value:
+#                        ratio = 1-ratio
+
                     probabilities[m_iter] = ratio
                 
 #                print(probabilities)
                 auc = roc_auc_score(binary_labels,probabilities)   
+                print((n_points,radius),auc)
                 params_auc.append(((n_points,radius),auc))
-            params_auc.sort(reverse=True,key=lambda k: k[1])
+                if auc == 1.0:
+                    break
+            if auc == 1.0:
+                break
+        params_auc.sort(reverse=True,key=lambda k: k[1])
+        print(params_auc)
         best_n_points,best_radius = params_auc[0][0]
         self.n_points = best_n_points
         self.radius = best_radius
         print("finished LBP fitting",self.radius,self.n_points,params_auc[0][1])
+        self.extracted = []
     
-    def countClassificationRatio(self,label_indices,label_name,label_value,labels):
-        relevant_count = 0
-        non_relevant_count = 0 
+    def countClassificationRatio(self,label_indices,label_name,is_positive,label_value,labels):
+        hit = 0
         for index in label_indices:
-            if labels[index][label_name] == label_value:
-                relevant_count += 1
-            else:
-                non_relevant_count += 1
+            sample_is_positive = labels[index][label_name] == label_value
+            sample_and_query_same = sample_is_positive == is_positive
+            if sample_and_query_same:
+                hit += 1
                 
-        return relevant_count / (len(label_indices))               
+        ratio = hit / (len(label_indices))
+        if is_positive:
+            return ratio
+        else:
+            return 1.0 - ratio       
+#        return ratio
+#        if not is_positive:
+#            ratio = 1 - ratio
+#        return ratio   
+    
+#    def countClassificationRatio(self,label_indices,label_name,label_value,labels):
+#        relevant_count = 0
+#        non_relevant_count = 0 
+#        for index in label_indices:
+#            if labels[index][label_name] == label_value:
+#                relevant_count += 1
+#            else:
+#                non_relevant_count += 1
+#                
+#        return relevant_count / (len(label_indices))               
                 
                 
     def extractFromBatch(self,scans,n_points=None,radius=None):
@@ -420,6 +430,7 @@ class LBPFeatures:
         self.extracted = retval       
     
     def extractFeatures(self,img,n_points,radius):
+        eps = 0.001
         if n_points == None:
             n_points = self.n_points
         if radius == None:
@@ -427,21 +438,35 @@ class LBPFeatures:
 #        print(n_points,radius)
         #http://scikit-image.org/docs/dev/auto_examples/features_detection/plot_local_binary_pattern.html
         lbp = ft.local_binary_pattern(img, n_points, radius, 'uniform')
-        n_bins = int(lbp.max() + 1)
+        n_bins = n_points**2 + 1#int(lbp.max() + 1)
         hist, _ = np.histogram(lbp, density=True, bins=n_bins, range=(0, n_bins))       
-        return hist
+        hist = np.divide(hist,sum(hist))
+        hist = np.add(hist,eps)
+        hist = np.divide(hist,sum(hist))       
+        return np.asarray(hist)
         
     
     #http://scikit-image.org/docs/dev/auto_examples/features_detection/plot_local_binary_pattern.html   
+#    def kullback_leibler_divergence(self,p, q):
+#        p = np.asarray(p)
+#        q = np.asarray(q)
+#        #min_length = min(len(p),len(q))
+#        #p = p[:min_length]
+#        #q = q[:min_length]
+#        filt = np.logical_and(p != 0, q != 0)
+#        return np.sum(p[filt] * np.log2(p[filt] / q[filt]))
+    
+    def j_divergence(self,p,q):
+        return self.kullback_leibler_divergence(p,q) + self.kullback_leibler_divergence(q,p)
+    
     def kullback_leibler_divergence(self,p, q):
-        p = np.asarray(p)
-        q = np.asarray(q)
-        min_length = min(len(p),len(q))
-        p = p[:min_length]
-        q = q[:min_length]
-        filt = np.logical_and(p != 0, q != 0)
-        return np.sum(p[filt] * np.log2(p[filt] / q[filt]))
-        
+#        p = np.asarray(p)
+#        q = np.asarray(q)
+        #min_length = min(len(p),len(q))
+        #p = p[:min_length]
+        #q = q[:min_length]
+        #filt = np.logical_and(p != 0, q != 0)
+        return np.sum(p * np.log2(p / q))       
     #default 8 and 30
     def query(self,img,k,n_points=None,radius=None):
         if n_points == None:
@@ -451,8 +476,9 @@ class LBPFeatures:
         index_distance = []
         h_query = self.extractFeatures(img,n_points,radius)
         for index,h_batch in enumerate(self.extracted):
-            diff = self.kullback_leibler_divergence(h_query,h_batch)
-            index_distance += [(index,diff)]
+             diff = self.j_divergence(h_query,h_batch)           
+#            diff = self.kullback_leibler_divergence(h_query,h_batch)
+             index_distance += [(index,diff)]
         index_distance.sort(key= lambda k:k[1])
         index = []
         distance = []
